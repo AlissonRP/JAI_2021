@@ -1,0 +1,260 @@
+---
+title: "Teste Criação slides"
+subtitle: "Alguma UF"  
+author: 
+  - "Alisson Rosa"
+date: '`r Sys.Date()`'
+output:
+  xaringan::moon_reader:
+    css: xaringan-themer.css
+    nature:
+      slideNumberFormat: "%current%"
+      highlightStyle: github
+      highlightLines: true
+      ratio: 16:9
+      countIncrementalSlides: false
+      countdown: 60000
+---
+
+Esse aqui é o primeiro slide e vai ter um gif 
+Introdução
+```{r setup,include=F}
+library('tidyverse')
+library('janitor')
+library('kableExtra')
+library('cowplot')
+library('tidymodels')
+library('epiR')
+library('DescTools')
+knitr::opts_chunk$set(echo=FALSE,message=F,warning=F,fig.pos = 'H',fig.align = 'center',fig.width=12, fig.height=5.5,fig.showtext = TRUE,dpi = 90)
+options(digits=3)
+options(OutDec=",")
+theme_set(theme_minimal())
+scale_fill_discrete = \(...) scale_fill_brewer(... , palette="Set2")
+options(htmltools.dir.version = FALSE)
+
+```
+```{r}
+
+```
+
+```{r data,message=F,echo=F,warning=F}
+df=read_csv("https://raw.githubusercontent.com/AlissonRP/Categorical--Data/master/ALUNO_PSICO2019.csv")
+df = df %>% 
+  filter(NU_ANO_INGRESSO==2019,TP_SITUACAO!="7") %>%
+      mutate(NU_IDADE=as.integer(NU_IDADE), CO_IES= as.integer(CO_IES),
+           Idade=cut(NU_IDADE,breaks=c(15,20,25,30,65,90),
+                     include.lowest = TRUE)) %>% 
+      mutate(NU_IDADE=as.character(NU_IDADE)) %>% 
+      mutate_if(is.double,as.factor) %>% 
+      mutate(NU_IDADE=as.double(NU_IDADE),id=as.double(NU_IDADE)) %>%
+      select(Turno=TP_TURNO,Sexo=TP_SEXO,Nacionalidade=TP_NACIONALIDADE,
+             Situação=TP_SITUACAO,`Apoio social`=IN_APOIO_SOCIAL,
+             id, Idade, CO_IES, CO_UF_NASCIMENTO) %>% 
+      mutate(Sexo=fct_recode(Sexo,"Feminino"="1","Masculino"="2"),
+             Turno=fct_recode(Turno,"Matutino"="1","Vespertino"="2",
+                              "Noturno"="3","Integral"="4"),
+            Nacionalidade=fct_recode(Nacionalidade,"Brasileira"="1",                              "Exterior/Naturalizado"="2","Estrangeira"="3"),
+            Situação=fct_collapse(Situação,Evadido=c("5","4"),
+                                  Retido=c("2","3","6")),
+            `Apoio social`=fct_recode(`Apoio social`,"Não"= "0","Sim"="1"))
+IES <- read_delim('https://raw.githubusercontent.com/AlissonRP/Psicologia-2019/master/IES.csv',delim=",")
+IES = IES  %>% 
+  rename(Codigo = CO_IES)
+df <- df %>% 
+  inner_join(IES, by = c('CO_IES' = 'Codigo')) %>%
+  mutate(Mobilidade = ifelse(CO_UF_NASCIMENTO == CO_UF, 
+                               "Mesmo estado", "Estado diferentes")) %>%
+  select(-X1, -CO_UF_NASCIMENTO, -CO_IES, -CO_REGIAO, -CO_UF)
+```
+
+```{r,tabelas de conting,include=F}
+#Função para gerar as tabelas de frequência para uma variavel
+freq_table=function(df,v,tit){
+  df %>% 
+  count({{v}}) %>% 
+  mutate(prop=prop.table(n) %>% round(3)) %>%
+  rename(`Frequência Absoluta`=n,`Frequência Relativa`=prop) %>% 
+  adorn_totals("row") %>% 
+  kable(caption=tit,align = "c") %>% 
+  kable_classic(latex_options = "HOLD_position") %>% 
+  footnote(general = "Elaborado pelos autores ",
+         general_title = "Fonte:",
+         footnote_as_chunk = T, title_format = c("italic"))
+}
+freq_table2=function(df,v1,v2,tit,marg){
+  if(missing(marg)){
+    df %>% 
+      group_by({{v1}},{{v2}}) %>%  
+      summarise(n=n())   %>%  
+      spread({{v2}}, n) %>% 
+      adorn_totals("row") %>%  
+      adorn_totals("col") %>% 
+      ungroup() %>% 
+      kable(caption=tit,align = "c") %>%
+      footnote(general = "Elaborado pelos autores ",
+         general_title = "Fonte:",
+         footnote_as_chunk = T, title_format = c("italic")) %>% 
+      kable_minimal() %>% 
+      add_header_above(c(" ","Situação"=3),align ="c")
+ 
+  } else {
+    df %>% 
+     group_by({{v1}},{{v2}}) %>%  
+     summarise(n=n())   %>%  
+     spread({{v2}}, n) %>% 
+     adorn_percentages() %>% 
+     ungroup() %>% 
+     mutate(Retido=Retido %>% round(3),Evadido=Evadido%>% round(3)) %>% 
+     kable(caption=tit,align = "c") %>% 
+    footnote(general = "Elaborado pelos autores ",
+         general_title = "Fonte:",
+         footnote_as_chunk = T, title_format = c("italic")) %>% 
+     kable_minimal() %>% 
+     add_header_above(c(" ","Situação"=2),align ="c")}
+  }
+conf_table=function(fit,p,tit){
+  fit %>% 
+   p(p) %>% 
+ select(Predito=.pred_class,Observado=sit) %>%
+    group_by(Predito,Observado) %>% 
+     summarise(n=n())   %>%  
+      spread(Observado, n) %>% 
+      adorn_totals("col") %>%  
+  kable(caption=tit,align = "c") %>%
+      footnote(general = "Elaborado pelos autores ",
+         general_title = "Fonte:",
+         footnote_as_chunk = T, title_format = c("italic")) %>% 
+      kable_minimal(latex_options = "HOLD_position") %>% 
+    add_header_above(c(" ","Observado"=3),align ="c")
+ 
+}
+g <- \(...) plotly::ggplotly(...)
+#função para gerar os graficos de barras
+g_t=function(df,v){
+  df %>% 
+  ggplot(aes({{v}})) + 
+  geom_bar(aes(fill={{v}}))+
+  geom_text(stat='count',aes(label=..count..),vjust=-0.5)+
+  theme_minimal()+
+    labs(y="Quantidade",x=df %>%
+         select({{v}}) %>% 
+         names(),caption = "Fonte: Elaborado pelos autores")+
+  scale_fill_brewer(palette="Set2")
+    
+}
+#Gráfico de barras duas variáveis
+g_t2=function(df,v1,v2){
+df %>% 
+  ggplot(aes({{v1}},fill={{v2}})) + 
+  geom_bar(position = "dodge")+
+  scale_fill_brewer(palette="Set2")+
+  theme_minimal()+
+  labs(y="Quantidade",x=df %>%
+         select({{v1}}) %>% 
+         names(),caption = "Fonte: Elaborado pelos autores")
+}
+```
+```{r xaringan-themer, include=FALSE, warning=FALSE}
+library(xaringanthemer)
+style_duo_accent(
+  primary_color = "#1A607B",
+  secondary_color = "#ffc43d",
+  text_font_google = google_font("Poppins"),  
+  header_font_google = google_font("Trade Winds") 
+)
+
+
+```
+
+
+```{r,echo=FALSE,fig.align = 'center',out.width = "40%"}
+knitr::include_graphics("https://i.pinimg.com/originals/e4/7e/6e/e47e6e6bb9f5435350c0484e88700853.gif")
+```
+
+---
+
+# As variáveis estudadas foram:
+- Turno: Dividida em quatro categorias
+- Sexo: Dividida em duas categorias
+- Nacionalidade: Dividida em três categorias
+- Apoio Social: Dividida em duas categorias
+- Idade: Discretizada em intervalos, sendo assim 5 categorias 
+
+---
+## Situação
+```{r}
+g(g_t(df,Situação)+
+  theme(legend.position="none"))
+
+
+```
+---
+## Sexo
+```{r}
+g(g_t(df,Sexo)+
+  theme(legend.position="none"))
+```
+---
+## Sexo e Situação em valores absolutos
+```{r}
+g(g_t2(df,Sexo,Situação))
+
+```
+
+
+--- 
+
+## Sexo e Situação em valores marginais
+```{r}
+freq_table2(df,Sexo,Situação,"Proporção marginal do Sexo na Situação do ingressante",1)
+```
+
+---
+## Turno
+```{r}
+
+```
+
+
+
+
+---
+Aqui vai o [dashboard](https://alissonrp.github.io/Psicologia-2019/)
+
+---
+class:middle
+&lt;iframe src="https://alissonrp.github.io/Psicologia-2019/" width="100%" height="1080px"&gt;&lt;/iframe&gt;
+
+
+
+
+---
+## Fim..
+
+---
+---
+class:middle
+
+
+&lt;div class="figure" style="text-align: center"&gt;
+&lt;img src="img/naruto.jpg" alt="&amp;lt;center&amp;gt;&amp;lt;b&amp;gt;Naruto? Sharingan? Xaringan? &amp;lt;/b&amp;gt;&amp;lt;/center&amp;gt;" width="100%" /&gt;
+&lt;p class="caption"&gt;&lt;center&gt;&lt;b&gt;Naruto? Sharingan? Xaringan? &lt;/b&gt;&lt;/center&gt;&lt;/p&gt;
+&lt;/div&gt;
+---
+--
+
+
+
+```{r ,echo=F, warning=FALSE}
+#https://www.kirenz.com/slides/xaringan-demo-slides.html#37
+```
+E vai estar separado
+
+--
+
+Termina aqui
+```{r,echo=F,fig.align = 'center',out.width = "40%"}
+knitr::include_graphics("https://media.baamboozle.com/uploads/images/76196/1621344198_43597_gif-url.gif")
+
+```
